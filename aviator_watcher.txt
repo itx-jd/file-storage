@@ -1,0 +1,116 @@
+let lastRoundId = null;
+let pollingInterval = null;
+let logLines = [];
+let recentEntries = [];
+
+// 🌿 Green floating log box
+function createFloatingLogUI() {
+  const existing = document.getElementById("floating-logger");
+  if (existing) existing.remove();
+
+  const logger = document.createElement("div");
+  logger.id = "floating-logger";
+  logger.style.position = "fixed";
+  logger.style.bottom = "10px";
+  logger.style.right = "10px";
+  logger.style.width = "320px";
+  logger.style.height = "400px";
+  logger.style.overflowY = "auto";
+  logger.style.background = "#003300";
+  logger.style.color = "#00FF00";
+  logger.style.padding = "10px";
+  logger.style.fontSize = "12px";
+  logger.style.zIndex = "9999";
+  logger.style.border = "1px solid #00FF00";
+  logger.style.borderRadius = "8px";
+  logger.innerHTML = `<b>Live Log:</b><br><div id="log-entries"></div>`;
+
+  document.body.appendChild(logger);
+}
+
+// ⏺ Update log UI
+function updateFloatingLogUI() {
+  const logDiv = document.getElementById("log-entries");
+  if (!logDiv) return;
+
+  logDiv.innerHTML = recentEntries
+    .slice()
+    .reverse()
+    .map((e) => `${e.time} | ${e.value} | Round ID: ${e.roundId}`)
+    .join("<br>");
+}
+
+// 🧠 Extract text using XPath
+function getTextByXPath(xpath) {
+  const result = document.evaluate(
+    xpath,
+    document,
+    null,
+    XPathResult.FIRST_ORDERED_NODE_TYPE,
+    null
+  );
+  return result.singleNodeValue?.innerText.trim() || null;
+}
+
+// 🚀 Start polling
+function startPolling(timezone = "Asia/Karachi") {
+  if (pollingInterval) clearInterval(pollingInterval);
+  createFloatingLogUI();
+
+  pollingInterval = setInterval(() => {
+    const payoutXPath = "/html/body/div[2]/div/div[3]/div[1]/div[2]/div/div[2]/div[1]/div/div/div[1]/div/div[1]";
+    const roundXPath = "/html/body/div[2]/div/div[3]/div[1]/div[2]/div/div[2]/div[2]/span/span/div/div/div[1]/span";
+
+    const value = getTextByXPath(payoutXPath);
+    const roundText = getTextByXPath(roundXPath);
+    const roundId = roundText?.match(/(\d+)/)?.[1];
+
+    if (value && roundId && roundId !== lastRoundId) {
+      const time = new Date().toLocaleString("en-US", {
+        timeZone: timezone,
+        hour12: false
+      });
+
+      const line = `${time},${value},${roundId}`;
+      logLines.push(line);
+      recentEntries.push({ time, value, roundId });
+
+      if (recentEntries.length > 50) {
+        recentEntries = recentEntries.slice(-50);
+      }
+
+      lastRoundId = roundId;
+      updateFloatingLogUI();
+      console.log("New payout logged:", line);
+    }
+  }, 500);
+
+  console.log("Polling started...");
+}
+
+// 🛑 Stop polling
+function stopPolling() {
+  clearInterval(pollingInterval);
+  pollingInterval = null;
+  console.log("Polling stopped.");
+}
+
+// 📤 Export CSV
+function downloadLogFile(filename = "log.csv") {
+  const blob = new Blob([logLines.join("\n")], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+
+  URL.revokeObjectURL(url);
+  console.log("Log file downloaded.");
+}
+
+
+startPolling("Asia/Karachi"); // start watching
+// ...
+stopPolling();                // stop when done
+downloadLogFile();            // export log as CSV
